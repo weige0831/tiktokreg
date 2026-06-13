@@ -1,0 +1,36 @@
+services:
+  tiktokreg-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: tiktokreg-frontend:latest
+    container_name: tiktokreg-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # ============ 鉴权配置 ============
+      # 管理员账号（前端控制台 Basic Auth）
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      # 留空则首次启动时自动生成（看 docker logs）
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+
+      # ============ Webhook 验签密钥 ============
+      # 必须与 GitHub Actions 中的 WEBHOOK_SECRET 一致
+      # 留空则首次启动时自动生成（看 docker logs）
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+
+      # ============ 数据库 ============
+      DATABASE_URL: sqlite:///./data/accounts.db
+
+      # ============ 网络 ============
+      HOST: 0.0.0.0
+      PORT: 8080
+    volumes:
+      # SQLite + 账号文件持久化
+      - ./data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

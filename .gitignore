@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+.npm/
+.pnpm-store/
+
+# 本地数据（绝不提交）
+data/
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.local
+config.local.yaml
+proxies.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 浏览器
+.playwright/
+*.log
+
+# 构建产物
+frontend/api/static/
+backend/data/

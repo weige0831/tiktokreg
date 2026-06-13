@@ -1,0 +1,14 @@
+# Node
+node_modules/
+dist/
+.pnpm-store/
+
+# Vite 构建产物（不提交，构建时生成）
+api/static/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

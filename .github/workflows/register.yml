@@ -1,0 +1,120 @@
+name: TikTok Batch Register
+
+on:
+  # 推送代码时自动触发（调试用，仅 main 分支）
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/register.yml'
+  # 手动触发（生产用）
+  workflow_dispatch:
+    inputs:
+      count:
+        description: '注册数量'
+        required: true
+        default: '5'
+        type: string
+      concurrency:
+        description: '并发数（建议 2-3）'
+        required: true
+        default: '2'
+        type: string
+
+# 防止并发跑多份任务
+concurrency:
+  group: tiktok-register
+  cancel-in-progress: false
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install Playwright browsers (with cache)
+        uses: actions/cache@v3
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-1.40.0
+
+      - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: python -m playwright install chromium --with-deps
+
+      - name: Install Chromium deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: python -m playwright install-deps chromium
+
+      - name: Check required secrets
+        id: secrets
+        env:
+          TEMPMAIL_BASE_URL: ${{ secrets.TEMPMAIL_BASE_URL }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          # 决定运行模式：完整模式还是自检模式
+          if [ -z "$TEMPMAIL_BASE_URL" ]; then
+            echo "mode=self_check" >> $GITHUB_OUTPUT
+            echo "::warning::TEMPMAIL_BASE_URL 未配置，仅做代码自检"
+          elif [ -z "$WEBHOOK_URL" ] || [ -z "$WEBHOOK_SECRET" ]; then
+            echo "mode=no_webhook" >> $GITHUB_OUTPUT
+            echo "::warning::WEBHOOK_URL 或 WEBHOOK_SECRET 未配置，注册会跑但不推送结果"
+          else
+            echo "mode=full" >> $GITHUB_OUTPUT
+            echo "完整模式：注册 + 推送"
+          fi
+
+      - name: Self check (no secrets configured)
+        if: steps.secrets.outputs.mode == 'self_check'
+        run: |
+          echo "==> 仅做代码自检，不执行实际注册"
+          python -c "import sys; sys.path.insert(0, 'backend'); from core.config_loader import load_config; cfg = load_config('backend/config.yaml'); print('✓ 配置加载正常')"
+          python -c "from playwright.sync_api import sync_playwright; print('✓ Playwright 可用')"
+          python -c "import cv2; print(f'✓ OpenCV {cv2.__version__}')"
+
+      - name: Run registration
+        if: steps.secrets.outputs.mode != 'self_check'
+        working-directory: backend
+        env:
+          TEMPMAIL_BASE_URL: ${{ secrets.TEMPMAIL_BASE_URL }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          LOG_LEVEL: INFO
+        run: |
+          # 决定参数
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            COUNT="${{ github.event.inputs.count }}"
+            CONCURRENCY="${{ github.event.inputs.concurrency }}"
+          else
+            # push 触发：用默认小批量做冒烟测试
+            COUNT=2
+            CONCURRENCY=1
+          fi
+          echo "==> 开始注册: count=$COUNT concurrency=$CONCURRENCY"
+          python main.py --count "$COUNT" --concurrency "$CONCURRENCY"
+
+      - name: Upload logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registration-logs-${{ github.run_id }}
+          path: backend/*.log
+          if-no-files-found: ignore
+          retention-days: 7

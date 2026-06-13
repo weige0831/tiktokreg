@@ -1,0 +1,102 @@
+# 后端注册机默认配置（运行在 GitHub Actions 中）
+# 敏感配置（如 webhook url/secret、tempmail base url）通过环境变量注入
+# 环境变量优先级高于本文件
+
+# ============ 注册流程 ============
+register:
+  # 注册目标数量
+  count: 5
+  # 最大并发数（GitHub Actions 单机建议 2-3）
+  concurrency: 2
+  # 单账号最长耗时（秒）
+  single_account_timeout: 180
+  # 验证码失败重试次数
+  captcha_max_retries: 3
+  # 整体注册失败重试次数
+  register_max_retries: 2
+
+# ============ 行为模拟 ============
+human:
+  # 打字每个字符的随机延迟范围（毫秒）
+  type_delay_min: 80
+  type_delay_max: 220
+  # 鼠标移动每步延迟（毫秒）
+  mouse_step_delay_min: 5
+  mouse_step_delay_max: 25
+  # 操作间停顿（秒）
+  action_pause_min: 0.8
+  action_pause_max: 2.5
+  # 滑块拖拽总时长（秒）
+  slider_drag_duration_min: 0.8
+  slider_drag_duration_max: 1.6
+
+# ============ 邮箱 ============
+tempmail:
+  # base_url 通过环境变量 TEMPMAIL_BASE_URL 注入
+  username_length: 10
+  # 用户名字符集（避免特殊符号触发 TikTok 风控）
+  username_chars: "abcdefghijklmnopqrstuvwxyz0123456789"
+  # 邮件轮询间隔（秒）
+  poll_interval: 3
+  # 邮件等待超时（秒）
+  poll_timeout: 120
+
+# ============ 代理 ============
+proxy:
+  # 是否启用代理（false 时走 GitHub Actions 本机 IP）
+  enabled: false
+  # 代理列表文件（相对 backend/ 目录）
+  proxy_file: "proxies.txt"
+  # 单代理最多使用次数
+  max_uses_per_proxy: 3
+  # 单代理连续失败多少次拉黑
+  max_fails_per_proxy: 3
+
+# ============ Webhook 推送 ============
+webhook:
+  # url / secret 通过环境变量 WEBHOOK_URL / WEBHOOK_SECRET 注入
+  # 推送超时（秒）
+  timeout: 30
+  # 失败重试次数
+  max_retries: 3
+
+# ============ 凭证提取 ============
+credentials:
+  # 需要保存的 cookie 名称
+  important_cookies:
+    - sessionid
+    - sessionid_ss
+    - tt_csrf_token
+    - ttwid
+    - msToken
+    - ttwid
+    - sid_tt
+    - uid_tt
+    - odin_tt
+    - passport_csrf_token
+    - passport_csrf_token_default
+
+# ============ 浏览器 ============
+browser:
+  # 视口大小（随机选择一个）
+  viewports:
+    - width: 1920
+      height: 1080
+    - width: 1536
+      height: 864
+    - width: 1440
+      height: 900
+    - width: 1366
+      height: 768
+  # 时区候选
+  timezones:
+    - "America/New_York"
+    - "America/Los_Angeles"
+    - "America/Chicago"
+    - "Europe/London"
+    - "Europe/Berlin"
+  # 语言候选
+  locales:
+    - "en-US"
+    - "en-GB"
+    - "en-CA"
