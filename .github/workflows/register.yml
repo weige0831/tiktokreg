@@ -1,13 +1,11 @@
 name: TikTok Batch Register
 
 on:
-  # 推送代码时自动触发（调试用，仅 main 分支）
   push:
     branches: [main]
     paths:
       - 'backend/**'
       - '.github/workflows/register.yml'
-  # 手动触发（生产用）
   workflow_dispatch:
     inputs:
       count:
@@ -21,7 +19,6 @@ on:
         default: '2'
         type: string
 
-# 防止并发跑多份任务
 concurrency:
   group: tiktok-register
   cancel-in-progress: false
@@ -42,25 +39,57 @@ jobs:
           cache: 'pip'
           cache-dependency-path: backend/requirements.txt
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Install Playwright browsers (with cache)
-        uses: actions/cache@v3
-        id: playwright-cache
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: pw-cache
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-1.40.0
+          key: ${{ runner.os }}-playwright-1.40.0-chromium-v2
 
-      - name: Install Chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: python -m playwright install chromium --with-deps
+      - name: Install system dependencies for Chromium
+        shell: bash
+        run: |
+          # Ubuntu 24.04 noble 兼容：libasound2 → libasound2t64
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2t64 \
+            libatk-bridge2.0-0 \
+            libatk1.0-0 \
+            libatspi2.0-0 \
+            libcairo2 \
+            libcups2 \
+            libdbus-1-3 \
+            libdrm2 \
+            libexpat1 \
+            libgbm1 \
+            libglib2.0-0 \
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 \
+            libx11-6 libx11-xcb1 libxcb1 libxcomposite1 \
+            libxdamage1 libxext6 libxfixes3 libxkbcommon0 \
+            libxrandr2 xdg-utils || true
 
-      - name: Install Chromium deps (cache hit)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: python -m playwright install-deps chromium
+      - name: Install Playwright Chromium (no --with-deps)
+        shell: bash
+        run: |
+          # 不用 --with-deps，因为上面手动安装了系统依赖
+          python -m playwright install chromium
+
+      - name: Verify Playwright works
+        run: |
+          cd backend
+          python -c "
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              browser.close()
+              print('✓ Playwright Chromium OK')
+          "
 
       - name: Check required secrets
         id: secrets
@@ -69,7 +98,6 @@ jobs:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
         run: |
-          # 决定运行模式：完整模式还是自检模式
           if [ -z "$TEMPMAIL_BASE_URL" ]; then
             echo "mode=self_check" >> $GITHUB_OUTPUT
             echo "::warning::TEMPMAIL_BASE_URL 未配置，仅做代码自检"
@@ -85,9 +113,9 @@ jobs:
         if: steps.secrets.outputs.mode == 'self_check'
         run: |
           echo "==> 仅做代码自检，不执行实际注册"
-          python -c "import sys; sys.path.insert(0, 'backend'); from core.config_loader import load_config; cfg = load_config('backend/config.yaml'); print('✓ 配置加载正常')"
-          python -c "from playwright.sync_api import sync_playwright; print('✓ Playwright 可用')"
-          python -c "import cv2; print(f'✓ OpenCV {cv2.__version__}')"
+          cd backend && python -c "from core.config_loader import load_config; cfg = load_config('config.yaml'); print('OK config')"
+          python -c "import cv2; print(f'OK opencv {cv2.__version__}')"
+          python -c "import httpx; print(f'OK httpx {httpx.__version__}')"
 
       - name: Run registration
         if: steps.secrets.outputs.mode != 'self_check'
@@ -98,12 +126,10 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           LOG_LEVEL: INFO
         run: |
-          # 决定参数
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             COUNT="${{ github.event.inputs.count }}"
             CONCURRENCY="${{ github.event.inputs.concurrency }}"
           else
-            # push 触发：用默认小批量做冒烟测试
             COUNT=2
             CONCURRENCY=1
           fi
